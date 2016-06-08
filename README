@@ -1,0 +1,51 @@
+lw supplicant
+==============
+
+Copyright (c) 2016, Kelvin Cheung <keguang.zhang@gmail.com> and contributors
+All Rights Reserved.
+
+
+
+WHAT IS THIS?
+-------------
+
+lw_supplicant is a light weight implementation of WPA/WPA2 and targeted for RTOS,
+which origins from wpa_supplicant.
+
+
+
+Features
+--------
+
+Supported 802.11 modes:
+- Station
+- AP
+
+Supported WPA/IEEE 802.11i features:
+- WEP
+- WPA-PSK ("WPA-Personal")
+- RSN/WPA2 (IEEE 802.11i)
+  * pre-authentication
+  * PMKSA caching
+
+
+
+Building
+--------
+
+In order to be able to build lw_supplicant, you will first need to
+select which parts of it will be included. This is done by creating a
+build time configuration file, .config, in the lw_supplicant root
+directory. Configuration options are text lines using following
+format: CONFIG_<option>=y. Lines starting with # are considered
+comments and are ignored. See defconfig file for an example configuration
+and a list of available options and additional notes.
+
+cp defconfig .config
+
+After you have created a configuration file, you can build
+lw_supplicant with 'make' command.
+
+make
+
+For cross compilation, please specify CONFIG_CROSS_COMPILE in .config.
