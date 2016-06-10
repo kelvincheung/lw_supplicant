@@ -28,7 +28,6 @@
 #include "l2_packet.h"
 #include "wpa_supplicant_i.h"
 #include "ctrl_iface.h"
-#include "ctrl_iface_dbus.h"
 #include "version.h"
 #include "preauth.h"
 #include "pmksa_cache.h"
@@ -796,9 +795,6 @@ void wpa_supplicant_set_state(struct wpa_supplicant *wpa_s, wpa_states state)
 	wpa_printf(MSG_DEBUG, "State: %s -> %s",
 		   wpa_supplicant_state_txt(wpa_s->wpa_state),
 		   wpa_supplicant_state_txt(state));
-
-	wpa_supplicant_dbus_notify_state_change(wpa_s, state,
-						wpa_s->wpa_state);
 
 	if (state == WPA_COMPLETED && wpa_s->new_connection) {
 #if defined(CONFIG_CTRL_IFACE) || !defined(CONFIG_NO_STDOUT_DEBUG)
@@ -2228,8 +2224,6 @@ static void wpa_supplicant_deinit_iface(struct wpa_supplicant *wpa_s)
 		wpa_clear_keys(wpa_s, NULL);
 	}
 
-	wpas_dbus_unregister_iface(wpa_s);
-
 	wpa_supplicant_cleanup(wpa_s);
 
 	if (wpa_s->drv_priv)
@@ -2273,13 +2267,6 @@ struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
 
 	wpa_s->global = global;
 
-	/* Register the interface with the dbus control interface */
-	if (wpas_dbus_register_iface(wpa_s)) {
-		wpa_supplicant_deinit_iface(wpa_s);
-		os_free(wpa_s);
-		return NULL;
-	}
-		
 	wpa_s->next = global->ifaces;
 	global->ifaces = wpa_s;
 
@@ -2404,15 +2391,6 @@ struct wpa_global * wpa_supplicant_init(struct wpa_params *params)
 		return NULL;
 	}
 
-	if (global->params.dbus_ctrl_interface) {
-		global->dbus_ctrl_iface =
-			wpa_supplicant_dbus_ctrl_iface_init(global);
-		if (global->dbus_ctrl_iface == NULL) {
-			wpa_supplicant_deinit(global);
-			return NULL;
-		}
-	}
-
 	if (global->params.wait_for_interface && global->params.daemonize &&
 	    wpa_supplicant_daemon(global->params.pid_file)) {
 		wpa_supplicant_deinit(global);
@@ -2472,8 +2450,6 @@ void wpa_supplicant_deinit(struct wpa_global *global)
 
 	if (global->ctrl_iface)
 		wpa_supplicant_global_ctrl_iface_deinit(global->ctrl_iface);
-	if (global->dbus_ctrl_iface)
-		wpa_supplicant_dbus_ctrl_iface_deinit(global->dbus_ctrl_iface);
 
 	eap_peer_unregister_methods();
 

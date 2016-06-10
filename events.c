@@ -26,7 +26,6 @@
 #include "pmksa_cache.h"
 #include "wpa_ctrl.h"
 #include "eap.h"
-#include "ctrl_iface_dbus.h"
 
 
 static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s)
@@ -512,8 +511,6 @@ static void wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s)
 		timeout = 1;
 		goto req_scan;
 	}
-
-	wpa_supplicant_dbus_notify_scan_results(wpa_s);
 
 	if (wpa_s->conf->ap_scan == 2 || wpa_s->disconnected)
 		return;
