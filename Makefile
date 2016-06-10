@@ -16,7 +16,6 @@ OBJS = common.o \
 	wpa_supplicant.o \
 	events.o \
 	l2_packet_none.o \
-	tls_none.o \
 	main_none.o \
 	drivers.o \
 	os_none.o \
