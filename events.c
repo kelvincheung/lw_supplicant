@@ -22,7 +22,6 @@
 #include "config.h"
 #include "l2_packet.h"
 #include "wpa_supplicant_i.h"
-#include "pcsc_funcs.h"
 #include "preauth.h"
 #include "pmksa_cache.h"
 #include "wpa_ctrl.h"
