@@ -276,24 +276,6 @@ static void wpa_supplicant_aborted_cached(void *ctx)
 #endif /* IEEE8021X_EAPOL */
 
 
-#if defined(IEEE8021X_EAPOL) || !defined(CONFIG_NO_WPA)
-static void wpa_supplicant_set_config_blob(void *ctx,
-					   struct wpa_config_blob *blob)
-{
-	struct wpa_supplicant *wpa_s = ctx;
-	wpa_config_set_blob(wpa_s->conf, blob);
-}
-
-
-static const struct wpa_config_blob *
-wpa_supplicant_get_config_blob(void *ctx, const char *name)
-{
-	struct wpa_supplicant *wpa_s = ctx;
-	return wpa_config_get_blob(wpa_s->conf, name);
-}
-#endif /* defined(IEEE8021X_EAPOL) || !defined(CONFIG_NO_WPA) */
-
-
 /* Configure default/group WEP key for static WEP */
 static int wpa_set_wep_key(void *ctx, int set_tx, int keyidx, const u8 *key,
 			   size_t keylen)
@@ -704,10 +686,6 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 		wpa_supplicant_ctrl_iface_deinit(wpa_s->ctrl_iface);
 		wpa_s->ctrl_iface = NULL;
 	}
-	if (wpa_s->conf != NULL) {
-		wpa_config_free(wpa_s->conf);
-		wpa_s->conf = NULL;
-	}
 
 	os_free(wpa_s->confname);
 	wpa_s->confname = NULL;
@@ -877,84 +855,6 @@ static void wpa_supplicant_clear_status(struct wpa_supplicant *wpa_s)
 	wpa_s->mgmt_group_cipher = 0;
 	wpa_s->key_mgmt = 0;
 	wpa_s->wpa_state = WPA_DISCONNECTED;
-}
-
-
-/**
- * wpa_supplicant_reload_configuration - Reload configuration data
- * @wpa_s: Pointer to wpa_supplicant data
- * Returns: 0 on success or -1 if configuration parsing failed
- *
- * This function can be used to request that the configuration data is reloaded
- * (e.g., after configuration file change). This function is reloading
- * configuration only for one interface, so this may need to be called multiple
- * times if %wpa_supplicant is controlling multiple interfaces and all
- * interfaces need reconfiguration.
- */
-int wpa_supplicant_reload_configuration(struct wpa_supplicant *wpa_s)
-{
-	struct wpa_config *conf;
-	int reconf_ctrl;
-	if (wpa_s->confname == NULL)
-		return -1;
-	conf = wpa_config_read(wpa_s->confname);
-	if (conf == NULL) {
-		wpa_msg(wpa_s, MSG_ERROR, "Failed to parse the configuration "
-			"file '%s' - exiting", wpa_s->confname);
-		return -1;
-	}
-
-	reconf_ctrl = !!conf->ctrl_interface != !!wpa_s->conf->ctrl_interface
-		|| (conf->ctrl_interface && wpa_s->conf->ctrl_interface &&
-		    os_strcmp(conf->ctrl_interface,
-			      wpa_s->conf->ctrl_interface) != 0);
-
-	if (reconf_ctrl && wpa_s->ctrl_iface) {
-		wpa_supplicant_ctrl_iface_deinit(wpa_s->ctrl_iface);
-		wpa_s->ctrl_iface = NULL;
-	}
-
-	eapol_sm_invalidate_cached_session(wpa_s->eapol);
-	wpa_s->current_ssid = NULL;
-	/*
-	 * TODO: should notify EAPOL SM about changes in opensc_engine_path,
-	 * pkcs11_engine_path, pkcs11_module_path.
-	 */
-	if (wpa_s->key_mgmt == WPA_KEY_MGMT_PSK) {
-		/*
-		 * Clear forced success to clear EAP state for next
-		 * authentication.
-		 */
-		eapol_sm_notify_eap_success(wpa_s->eapol, FALSE);
-	}
-	eapol_sm_notify_config(wpa_s->eapol, NULL, NULL);
-	wpa_sm_set_config(wpa_s->wpa, NULL);
-	wpa_sm_set_fast_reauth(wpa_s->wpa, wpa_s->conf->fast_reauth);
-	rsn_preauth_deinit(wpa_s->wpa);
-	wpa_config_free(wpa_s->conf);
-	wpa_s->conf = conf;
-	if (reconf_ctrl)
-		wpa_s->ctrl_iface = wpa_supplicant_ctrl_iface_init(wpa_s);
-
-	wpa_supplicant_clear_status(wpa_s);
-	wpa_s->reassociate = 1;
-	wpa_supplicant_req_scan(wpa_s, 0, 0);
-	wpa_msg(wpa_s, MSG_DEBUG, "Reconfiguration completed");
-	return 0;
-}
-
-
-static void wpa_supplicant_reconfig(int sig, void *eloop_ctx,
-				    void *signal_ctx)
-{
-	struct wpa_global *global = eloop_ctx;
-	struct wpa_supplicant *wpa_s;
-	wpa_printf(MSG_DEBUG, "Signal %d received - reconfiguring", sig);
-	for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next) {
-		if (wpa_supplicant_reload_configuration(wpa_s) < 0) {
-			eloop_terminate();
-		}
-	}
 }
 
 
@@ -2107,46 +2007,6 @@ static int wpa_supplicant_init_iface(struct wpa_supplicant *wpa_s,
 		return -1;
 	}
 
-	if (iface->confname) {
-#ifdef CONFIG_BACKEND_FILE
-		wpa_s->confname = os_rel2abs_path(iface->confname);
-		if (wpa_s->confname == NULL) {
-			wpa_printf(MSG_ERROR, "Failed to get absolute path "
-				   "for configuration file '%s'.",
-				   iface->confname);
-			return -1;
-		}
-		wpa_printf(MSG_DEBUG, "Configuration file '%s' -> '%s'",
-			   iface->confname, wpa_s->confname);
-#else /* CONFIG_BACKEND_FILE */
-		wpa_s->confname = os_strdup(iface->confname);
-#endif /* CONFIG_BACKEND_FILE */
-		wpa_s->conf = wpa_config_read(wpa_s->confname);
-		if (wpa_s->conf == NULL) {
-			wpa_printf(MSG_ERROR, "Failed to read or parse "
-				   "configuration '%s'.", wpa_s->confname);
-			return -1;
-		}
-
-		/*
-		 * Override ctrl_interface and driver_param if set on command
-		 * line.
-		 */
-		if (iface->ctrl_interface) {
-			os_free(wpa_s->conf->ctrl_interface);
-			wpa_s->conf->ctrl_interface =
-				os_strdup(iface->ctrl_interface);
-		}
-
-		if (iface->driver_param) {
-			os_free(wpa_s->conf->driver_param);
-			wpa_s->conf->driver_param =
-				os_strdup(iface->driver_param);
-		}
-	} else
-		wpa_s->conf = wpa_config_alloc_empty(iface->ctrl_interface,
-						     iface->driver_param);
-
 	if (wpa_s->conf == NULL) {
 		wpa_printf(MSG_ERROR, "\nNo configuration found.");
 		return -1;
@@ -2195,8 +2055,6 @@ static int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s)
 	ctx->eapol_done_cb = wpa_supplicant_notify_eapol_done;
 	ctx->eapol_send = wpa_supplicant_eapol_send;
 	ctx->set_wep_key = wpa_eapol_set_wep_key;
-	ctx->set_config_blob = wpa_supplicant_set_config_blob;
-	ctx->get_config_blob = wpa_supplicant_get_config_blob;
 	ctx->aborted_cached = wpa_supplicant_aborted_cached;
 	ctx->opensc_engine_path = wpa_s->conf->opensc_engine_path;
 	ctx->pkcs11_engine_path = wpa_s->conf->pkcs11_engine_path;
@@ -2239,8 +2097,6 @@ static int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s)
 	ctx->cancel_auth_timeout = _wpa_supplicant_cancel_auth_timeout;
 	ctx->add_pmkid = wpa_supplicant_add_pmkid;
 	ctx->remove_pmkid = wpa_supplicant_remove_pmkid;
-	ctx->set_config_blob = wpa_supplicant_set_config_blob;
-	ctx->get_config_blob = wpa_supplicant_get_config_blob;
 	ctx->mlme_setprotection = wpa_supplicant_mlme_setprotection;
 
 	wpa_s->wpa = wpa_sm_init(ctx);
@@ -2594,7 +2450,6 @@ int wpa_supplicant_run(struct wpa_global *global)
 	}
 
 	eloop_register_signal_terminate(wpa_supplicant_terminate, NULL);
-	eloop_register_signal_reconfig(wpa_supplicant_reconfig, NULL);
 
 	eloop_run();
 

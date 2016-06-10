@@ -20,8 +20,6 @@ OBJS = common.o \
 	main_none.o \
 	drivers.o \
 	os_none.o \
-	config.o \
-	config_none.o
 
 CFLAGS = -O2 -Wall
 

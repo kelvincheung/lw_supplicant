@@ -27,6 +27,14 @@
 *.i*86
 *.x86_64
 *.hex
+wpa_supplicant
 
 # Debug files
 *.dSYM/
+
+# Config file
+.config
+
+# cscope files
+cscope.*
+ncscope.*

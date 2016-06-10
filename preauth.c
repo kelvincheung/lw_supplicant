@@ -220,8 +220,6 @@ int rsn_preauth_init(struct wpa_sm *sm, const u8 *dst, struct wpa_ssid *config)
 	ctx->scard_ctx = sm->scard_ctx;
 	ctx->eapol_send = rsn_preauth_eapol_send;
 	ctx->eapol_send_ctx = sm;
-	ctx->set_config_blob = sm->ctx->set_config_blob;
-	ctx->get_config_blob = sm->ctx->get_config_blob;
 
 	sm->preauth_eapol = eapol_sm_init(ctx);
 	if (sm->preauth_eapol == NULL) {

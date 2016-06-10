@@ -149,25 +149,6 @@ struct eapol_ctx {
 			   const u8 *key, size_t keylen);
 
 	/**
-	 * set_config_blob - Set or add a named configuration blob
-	 * @ctx: Callback context (ctx)
-	 * @blob: New value for the blob
-	 *
-	 * Adds a new configuration blob or replaces the current value of an
-	 * existing blob.
-	 */
-	void (*set_config_blob)(void *ctx, struct wpa_config_blob *blob);
-
-	/**
-	 * get_config_blob - Get a named configuration blob
-	 * @ctx: Callback context (ctx)
-	 * @name: Name of the blob
-	 * Returns: Pointer to blob data or %NULL if not found
-	 */
-	const struct wpa_config_blob * (*get_config_blob)(void *ctx,
-							  const char *name);
-
-	/**
 	 * aborted_cached - Notify that cached PMK attempt was aborted
 	 * @ctx: Callback context (ctx)
 	 */
