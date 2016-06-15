@@ -39,17 +39,6 @@ int os_mktime(int year, int month, int day, int hour, int min, int sec,
 }
 
 
-int os_daemonize(const char *pid_file)
-{
-	return -1;
-}
-
-
-void os_daemonize_terminate(const char *pid_file)
-{
-}
-
-
 int os_get_random(unsigned char *buf, size_t len)
 {
 	return -1;
