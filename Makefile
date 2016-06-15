@@ -22,6 +22,9 @@ OBJS = common.o \
 
 CFLAGS = -O2 -Wall
 
+ifdef CONFIG_OS_NO_C_LIB
+CFLAGS += -DOS_NO_C_LIB_DEFINES
+endif
 ifdef CONFIG_INTERNAL_MD5
 CFLAGS += -DINTERNAL_MD5
 endif

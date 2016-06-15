@@ -1064,7 +1064,7 @@ void * aes_encrypt_init(const u8 *key, size_t len)
 	u32 *rk;
 	if (len != 16)
 		return NULL;
-	/*rk = os_malloc(4 * 44);*/
+	rk = os_malloc(4 * 44);
 	if (rk == NULL)
 		return NULL;
 	rijndaelKeySetupEnc(rk, key);
@@ -1080,7 +1080,7 @@ void aes_encrypt(void *ctx, const u8 *plain, u8 *crypt)
 
 void aes_encrypt_deinit(void *ctx)
 {
-	/*os_free(ctx);*/
+	os_free(ctx);
 }
 
 
@@ -1089,7 +1089,7 @@ void * aes_decrypt_init(const u8 *key, size_t len)
 	u32 *rk;
 	if (len != 16)
 		return NULL;
-	/*rk = os_malloc(4 * 44);*/
+	rk = os_malloc(4 * 44);
 	if (rk == NULL)
 		return NULL;
 	rijndaelKeySetupDec(rk, key);
@@ -1105,5 +1105,5 @@ void aes_decrypt(void *ctx, const u8 *crypt, u8 *plain)
 
 void aes_decrypt_deinit(void *ctx)
 {
-	/*os_free(ctx);*/
+	os_free(ctx);
 }
