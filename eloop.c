@@ -13,10 +13,8 @@
  */
 
 #include "includes.h"
-
 #include "common.h"
 #include "eloop.h"
-
 
 struct eloop_sock {
 	int sock;
@@ -31,6 +29,7 @@ struct eloop_timeout {
 	void *user_data;
 	eloop_timeout_handler handler;
 	struct eloop_timeout *next;
+	int online;
 };
 
 struct eloop_signal {
@@ -64,6 +63,7 @@ struct eloop_data {
 
 	int terminate;
 	int reader_table_changed;
+	struct eloop_timeout   timeout_cnt[MAX_TIMER_COUNT];
 };
 
 static struct eloop_data eloop;
@@ -77,151 +77,26 @@ int eloop_init(void *user_data)
 }
 
 
-static int eloop_sock_table_add_sock(struct eloop_sock_table *table,
-                                     int sock, eloop_sock_handler handler,
-                                     void *eloop_data, void *user_data)
+
+struct eloop_timeout *eloop_get_free_timer(void)
 {
-	struct eloop_sock *tmp;
+	int i = 0;
 
-	if (table == NULL)
-		return -1;
-
-	tmp = (struct eloop_sock *)
-		os_realloc(table->table,
-			   (table->count + 1) * sizeof(struct eloop_sock));
-	if (tmp == NULL)
-		return -1;
-
-	tmp[table->count].sock = sock;
-	tmp[table->count].eloop_data = eloop_data;
-	tmp[table->count].user_data = user_data;
-	tmp[table->count].handler = handler;
-	table->count++;
-	table->table = tmp;
-	if (sock > eloop.max_sock)
-		eloop.max_sock = sock;
-	table->changed = 1;
-
-	return 0;
-}
-
-
-static void eloop_sock_table_remove_sock(struct eloop_sock_table *table,
-                                         int sock)
-{
-	int i;
-
-	if (table == NULL || table->table == NULL || table->count == 0)
-		return;
-
-	for (i = 0; i < table->count; i++) {
-		if (table->table[i].sock == sock)
-			break;
-	}
-	if (i == table->count)
-		return;
-	if (i != table->count - 1) {
-		os_memmove(&table->table[i], &table->table[i + 1],
-			   (table->count - i - 1) *
-			   sizeof(struct eloop_sock));
-	}
-	table->count--;
-	table->changed = 1;
-}
-
-
-static void eloop_sock_table_set_fds(struct eloop_sock_table *table,
-				     fd_set *fds)
-{
-	int i;
-
-	FD_ZERO(fds);
-
-	if (table->table == NULL)
-		return;
-
-	for (i = 0; i < table->count; i++)
-		FD_SET(table->table[i].sock, fds);
-}
-
-
-static void eloop_sock_table_dispatch(struct eloop_sock_table *table,
-				      fd_set *fds)
-{
-	int i;
-
-	if (table == NULL || table->table == NULL)
-		return;
-
-	table->changed = 0;
-	for (i = 0; i < table->count; i++) {
-		if (FD_ISSET(table->table[i].sock, fds)) {
-			table->table[i].handler(table->table[i].sock,
-						table->table[i].eloop_data,
-						table->table[i].user_data);
-			if (table->changed)
-				break;
+	for (i = 0; i < MAX_TIMER_COUNT; i++) {
+		if (eloop.timeout_cnt[i].online != 1) {
+			eloop.timeout_cnt[i].online = 1;
+			return &eloop.timeout_cnt[i];
 		}
 	}
-}
-
-
-static void eloop_sock_table_destroy(struct eloop_sock_table *table)
-{
-	if (table)
-		os_free(table->table);
-}
-
-
-int eloop_register_read_sock(int sock, eloop_sock_handler handler,
-			     void *eloop_data, void *user_data)
-{
-	return eloop_register_sock(sock, EVENT_TYPE_READ, handler,
-				   eloop_data, user_data);
-}
-
-
-void eloop_unregister_read_sock(int sock)
-{
-	eloop_unregister_sock(sock, EVENT_TYPE_READ);
-}
-
-
-static struct eloop_sock_table *eloop_get_sock_table(eloop_event_type type)
-{
-	switch (type) {
-	case EVENT_TYPE_READ:
-		return &eloop.readers;
-	case EVENT_TYPE_WRITE:
-		return &eloop.writers;
-	case EVENT_TYPE_EXCEPTION:
-		return &eloop.exceptions;
-	}
-
 	return NULL;
 }
 
-
-int eloop_register_sock(int sock, eloop_event_type type,
-			eloop_sock_handler handler,
-			void *eloop_data, void *user_data)
+inline void  eloop_put_free_timer(struct eloop_timeout *timeout)
 {
-	struct eloop_sock_table *table;
 
-	table = eloop_get_sock_table(type);
-	return eloop_sock_table_add_sock(table, sock, handler,
-					 eloop_data, user_data);
+	timeout->online = 0;
+
 }
-
-
-void eloop_unregister_sock(int sock, eloop_event_type type)
-{
-	struct eloop_sock_table *table;
-
-	table = eloop_get_sock_table(type);
-	eloop_sock_table_remove_sock(table, sock);
-}
-
 
 int eloop_register_timeout(unsigned int secs, unsigned int usecs,
 			   eloop_timeout_handler handler,
@@ -229,7 +104,7 @@ int eloop_register_timeout(unsigned int secs, unsigned int usecs,
 {
 	struct eloop_timeout *timeout, *tmp, *prev;
 
-	timeout = os_malloc(sizeof(*timeout));
+	timeout = eloop_get_free_timer();
 	if (timeout == NULL)
 		return -1;
 	if (os_get_time(&timeout->time) < 0) {
@@ -293,7 +168,7 @@ int eloop_cancel_timeout(eloop_timeout_handler handler,
 				eloop.timeout = next;
 			else
 				prev->next = next;
-			os_free(timeout);
+			eloop_put_free_timer(timeout);
 			removed++;
 		} else
 			prev = timeout;
@@ -324,32 +199,9 @@ int eloop_is_timeout_registered(eloop_timeout_handler handler,
 }
 
 
-#ifndef CONFIG_NATIVE_WINDOWS
-static void eloop_handle_alarm(int sig)
-{
-	fprintf(stderr, "eloop: could not process SIGINT or SIGTERM in two "
-		"seconds. Looks like there\n"
-		"is a bug that ends up in a busy loop that "
-		"prevents clean shutdown.\n"
-		"Killing program forcefully.\n");
-	exit(1);
-}
-#endif /* CONFIG_NATIVE_WINDOWS */
-
-
 static void eloop_handle_signal(int sig)
 {
 	int i;
-
-#ifndef CONFIG_NATIVE_WINDOWS
-	if ((sig == SIGINT || sig == SIGTERM) && !eloop.pending_terminate) {
-		/* Use SIGALRM to break out from potential busy loops that
-		 * would not allow the program to be killed. */
-		eloop.pending_terminate = 1;
-		signal(SIGALRM, eloop_handle_alarm);
-		alarm(2);
-	}
-#endif /* CONFIG_NATIVE_WINDOWS */
 
 	eloop.signaled++;
 	for (i = 0; i < eloop.signal_count; i++) {
@@ -434,18 +286,10 @@ int eloop_register_signal_reconfig(eloop_signal_handler handler,
 
 void eloop_run(void)
 {
-	fd_set *rfds, *wfds, *efds;
+
 	int res;
 	struct timeval _tv;
 	struct os_time tv, now;
-
-	rfds = os_malloc(sizeof(*rfds));
-	wfds = os_malloc(sizeof(*wfds));
-	efds = os_malloc(sizeof(*efds));
-	if (rfds == NULL || wfds == NULL || efds == NULL) {
-		printf("eloop_run - malloc failed\n");
-		goto out;
-	}
 
 	while (!eloop.terminate &&
 	       (eloop.timeout || eloop.readers.count > 0 ||
@@ -464,15 +308,7 @@ void eloop_run(void)
 			_tv.tv_usec = tv.usec;
 		}
 
-		eloop_sock_table_set_fds(&eloop.readers, rfds);
-		eloop_sock_table_set_fds(&eloop.writers, wfds);
-		eloop_sock_table_set_fds(&eloop.exceptions, efds);
-		res = select(eloop.max_sock + 1, rfds, wfds, efds,
-			     eloop.timeout ? &_tv : NULL);
-		if (res < 0 && errno != EINTR && errno != 0) {
-			perror("select");
-			goto out;
-		}
+
 		eloop_process_pending_signals();
 
 		/* check if some registered timeouts have occurred */
@@ -493,15 +329,10 @@ void eloop_run(void)
 		if (res <= 0)
 			continue;
 
-		eloop_sock_table_dispatch(&eloop.readers, rfds);
-		eloop_sock_table_dispatch(&eloop.writers, wfds);
-		eloop_sock_table_dispatch(&eloop.exceptions, efds);
 	}
 
-out:
-	os_free(rfds);
-	os_free(wfds);
-	os_free(efds);
+
+
 }
 
 
@@ -519,11 +350,9 @@ void eloop_destroy(void)
 	while (timeout != NULL) {
 		prev = timeout;
 		timeout = timeout->next;
-		os_free(prev);
+		eloop_put_free_timer(prev);
 	}
-	eloop_sock_table_destroy(&eloop.readers);
-	eloop_sock_table_destroy(&eloop.writers);
-	eloop_sock_table_destroy(&eloop.exceptions);
+
 	os_free(eloop.signals);
 }
 
@@ -534,20 +363,3 @@ int eloop_terminated(void)
 }
 
 
-void eloop_wait_for_read_sock(int sock)
-{
-	fd_set rfds;
-
-	if (sock < 0)
-		return;
-
-	FD_ZERO(&rfds);
-	FD_SET(sock, &rfds);
-	select(sock + 1, &rfds, NULL, NULL, NULL);
-}
-
-
-void * eloop_get_user_data(void)
-{
-	return eloop.user_data;
-}

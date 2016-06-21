@@ -31,6 +31,26 @@
 #define IEEE80211_CAP_PRIVACY	0x0010
 
 #define SSID_MAX_WPA_IE_LEN 40
+
+#define WPA_DRIVER_CAPA_KEY_MGMT_WPA		0x00000001
+#define WPA_DRIVER_CAPA_KEY_MGMT_WPA2		0x00000002
+#define WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK	0x00000004
+#define WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK	0x00000008
+#define WPA_DRIVER_CAPA_KEY_MGMT_WPA_NONE	0x00000010
+
+#define WPA_DRIVER_CAPA_ENC_WEP40	0x00000001
+#define WPA_DRIVER_CAPA_ENC_WEP104	0x00000002
+#define WPA_DRIVER_CAPA_ENC_TKIP	0x00000004
+#define WPA_DRIVER_CAPA_ENC_CCMP	0x00000008
+
+#define WPA_DRIVER_AUTH_OPEN		0x00000001
+#define WPA_DRIVER_AUTH_SHARED		0x00000002
+#define WPA_DRIVER_AUTH_LEAP		0x00000004
+
+#define WPA_DRIVER_FLAGS_DRIVER_IE	0x00000001
+#define WPA_DRIVER_FLAGS_SET_KEYS_AFTER_ASSOC 0x00000002
+#define WPA_DRIVER_FLAGS_USER_SPACE_MLME 0x00000004
+
 /**
  * struct wpa_scan_result - Scan results
  * @bssid: BSSID
@@ -125,11 +145,6 @@ struct wpa_driver_associate_params {
 	int auth_alg;
 
 	/**
-	 * mode - Operation mode (infra/ibss) IEEE80211_MODE_*
-	 */
-	int mode;
-
-	/**
 	 * wep_key - WEP keys for static WEP configuration
 	 */
 	const u8 *wep_key[4];
@@ -158,28 +173,17 @@ struct wpa_driver_associate_params {
  * struct wpa_driver_capa - Driver capability information
  */
 struct wpa_driver_capa {
-#define WPA_DRIVER_CAPA_KEY_MGMT_WPA		0x00000001
-#define WPA_DRIVER_CAPA_KEY_MGMT_WPA2		0x00000002
-#define WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK	0x00000004
-#define WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK	0x00000008
-#define WPA_DRIVER_CAPA_KEY_MGMT_WPA_NONE	0x00000010
+
 	unsigned int key_mgmt;
 
-#define WPA_DRIVER_CAPA_ENC_WEP40	0x00000001
-#define WPA_DRIVER_CAPA_ENC_WEP104	0x00000002
-#define WPA_DRIVER_CAPA_ENC_TKIP	0x00000004
-#define WPA_DRIVER_CAPA_ENC_CCMP	0x00000008
+
 	unsigned int enc;
 
-#define WPA_DRIVER_AUTH_OPEN		0x00000001
-#define WPA_DRIVER_AUTH_SHARED		0x00000002
-#define WPA_DRIVER_AUTH_LEAP		0x00000004
+
 	unsigned int auth;
 
 /* Driver generated WPA/RSN IE */
-#define WPA_DRIVER_FLAGS_DRIVER_IE	0x00000001
-#define WPA_DRIVER_FLAGS_SET_KEYS_AFTER_ASSOC 0x00000002
-#define WPA_DRIVER_FLAGS_USER_SPACE_MLME 0x00000004
+
 	unsigned int flags;
 };
 

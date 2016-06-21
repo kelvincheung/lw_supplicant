@@ -36,25 +36,7 @@ struct rsn_pmksa_candidate {
 };
 
 
-/**
- * pmksa_candidate_free - Free all entries in PMKSA candidate list
- * @sm: Pointer to WPA state machine data from wpa_sm_init()
- */
-void pmksa_candidate_free(struct wpa_sm *sm)
-{
-	struct rsn_pmksa_candidate *entry, *prev;
 
-	if (sm == NULL)
-		return;
-
-	entry = sm->pmksa_candidates;
-	sm->pmksa_candidates = NULL;
-	while (entry) {
-		prev = entry;
-		entry = entry->next;
-		os_free(prev);
-	}
-}
 
 
 #if defined(IEEE8021X_EAPOL) && !defined(CONFIG_NO_WPA2)
@@ -441,7 +423,6 @@ void rsn_preauth_scan_results(struct wpa_sm *sm,
 	 * TODO: is it ok to free all candidates? What about the entries
 	 * received from EVENT_PMKID_CANDIDATE?
 	 */
-	pmksa_candidate_free(sm);
 
 	for (i = count - 1; i >= 0; i--) {
 		r = &results[i];

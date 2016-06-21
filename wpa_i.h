@@ -38,38 +38,11 @@ struct wpa_ptk {
 	} u;
 } STRUCT_PACKED;
 
-#ifdef _MSC_VER
-#pragma pack(pop)
-#endif /* _MSC_VER */
 
 
-#ifdef CONFIG_PEERKEY
-#define PEERKEY_MAX_IE_LEN 80
-struct wpa_peerkey {
-	struct wpa_peerkey *next;
-	int initiator; /* whether this end was initator for SMK handshake */
-	u8 addr[ETH_ALEN]; /* other end MAC address */
-	u8 inonce[WPA_NONCE_LEN]; /* Initiator Nonce */
-	u8 pnonce[WPA_NONCE_LEN]; /* Peer Nonce */
-	u8 rsnie_i[PEERKEY_MAX_IE_LEN]; /* Initiator RSN IE */
-	size_t rsnie_i_len;
-	u8 rsnie_p[PEERKEY_MAX_IE_LEN]; /* Peer RSN IE */
-	size_t rsnie_p_len;
-	u8 smk[PMK_LEN];
-	int smk_complete;
-	u8 smkid[PMKID_LEN];
-	u32 lifetime;
-	os_time_t expiration;
-	int cipher; /* Selected cipher (WPA_CIPHER_*) */
-	u8 replay_counter[WPA_REPLAY_COUNTER_LEN];
-	int replay_counter_set;
 
-	struct wpa_ptk stk, tstk;
-	int stk_set, tstk_set;
-};
-#else /* CONFIG_PEERKEY */
+
 struct wpa_peerkey;
-#endif /* CONFIG_PEERKEY */
 
 
 /**
@@ -87,18 +60,14 @@ struct wpa_sm {
 	int rx_replay_counter_set;
 	u8 request_counter[WPA_REPLAY_COUNTER_LEN];
 
-	struct eapol_sm *eapol; /* EAPOL state machine from upper level code */
-
 	struct rsn_pmksa_cache *pmksa; /* PMKSA cache */
 	struct rsn_pmksa_cache_entry *cur_pmksa; /* current PMKSA entry */
 	struct rsn_pmksa_candidate *pmksa_candidates;
-
 	struct l2_packet_data *l2_preauth;
 	struct l2_packet_data *l2_preauth_br;
 	u8 preauth_bssid[ETH_ALEN]; /* current RSN pre-auth peer or
 				     * 00:00:00:00:00:00 if no pre-auth is
 				     * in progress */
-	struct eapol_sm *preauth_eapol;
 
 	struct wpa_sm_ctx *ctx;
 
@@ -112,11 +81,6 @@ struct wpa_sm {
 	const char *bridge_ifname;
 	u8 bssid[ETH_ALEN];
 
-	unsigned int dot11RSNAConfigPMKLifetime;
-	unsigned int dot11RSNAConfigPMKReauthThreshold;
-	unsigned int dot11RSNAConfigSATimeout;
-
-	unsigned int dot11RSNA4WayHandshakeFailures;
 
 	/* Selected configuration (based on Beacon/ProbeResp WPA IE) */
 	unsigned int proto;
@@ -130,9 +94,7 @@ struct wpa_sm {
 	u8 *ap_wpa_ie, *ap_rsn_ie;
 	size_t ap_wpa_ie_len, ap_rsn_ie_len;
 
-#ifdef CONFIG_PEERKEY
-	struct wpa_peerkey *peerkey;
-#endif /* CONFIG_PEERKEY */
+
 };
 
 

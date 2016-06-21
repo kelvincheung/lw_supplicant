@@ -28,236 +28,7 @@ struct wpa_scan_result;
 struct wpa_sm;
 struct wpa_supplicant;
 
-/*
- * Forward declarations of private structures used within the ctrl_iface
- * backends. Other parts of wpa_supplicant do not have access to data stored in
- * these structures.
- */
-struct ctrl_iface_priv;
-struct ctrl_iface_global_priv;
-struct ctrl_iface_dbus_priv;
-
-/**
- * struct wpa_interface - Parameters for wpa_supplicant_add_iface()
- */
-struct wpa_interface {
-	/**
-	 * confname - Configuration name (file or profile) name
-	 *
-	 * This can also be %NULL when a configuration file is not used. In
-	 * that case, ctrl_interface must be set to allow the interface to be
-	 * configured.
-	 */
-	const char *confname;
-
-	/**
-	 * ctrl_interface - Control interface parameter
-	 *
-	 * If a configuration file is not used, this variable can be used to
-	 * set the ctrl_interface parameter that would have otherwise been read
-	 * from the configuration file. If both confname and ctrl_interface are
-	 * set, ctrl_interface is used to override the value from configuration
-	 * file.
-	 */
-	const char *ctrl_interface;
-
-	/**
-	 * driver - Driver interface name, or %NULL to use the default driver
-	 */
-	const char *driver;
-
-	/**
-	 * driver_param - Driver interface parameters
-	 *
-	 * If a configuration file is not used, this variable can be used to
-	 * set the driver_param parameters that would have otherwise been read
-	 * from the configuration file. If both confname and driver_param are
-	 * set, driver_param is used to override the value from configuration
-	 * file.
-	 */
-	const char *driver_param;
-
-	/**
-	 * ifname - Interface name
-	 */
-	const char *ifname;
-
-	/**
-	 * bridge_ifname - Optional bridge interface name
-	 *
-	 * If the driver interface (ifname) is included in a Linux bridge
-	 * device, the bridge interface may need to be used for receiving EAPOL
-	 * frames. This can be enabled by setting this variable to enable
-	 * receiving of EAPOL frames from an additional interface.
-	 */
-	const char *bridge_ifname;
-};
-
-/**
- * struct wpa_params - Parameters for wpa_supplicant_init()
- */
-struct wpa_params {
-	/**
-	 * daemonize - Run %wpa_supplicant in the background
-	 */
-	int daemonize;
-
-	/**
-	 * wait_for_interface - Wait for the network interface to appear
-	 *
-	 * If set, %wpa_supplicant will wait until all the configured network
-	 * interfaces are available before starting processing. Please note
-	 * that in many cases, a better alternative would be to start
-	 * %wpa_supplicant without network interfaces and add the interfaces
-	 * dynamically whenever they become available.
-	 */
-	int wait_for_interface;
-
-	/**
-	 * wait_for_monitor - Wait for a monitor program before starting
-	 */
-	int wait_for_monitor;
-
-	/**
-	 * pid_file - Path to a PID (process ID) file
-	 *
-	 * If this and daemonize are set, process ID of the background process
-	 * will be written to the specified file.
-	 */
-	char *pid_file;
-
-	/**
-	 * wpa_debug_level - Debugging verbosity level (e.g., MSG_INFO)
-	 */
-	int wpa_debug_level;
-
-	/**
-	 * wpa_debug_show_keys - Whether keying material is included in debug
-	 *
-	 * This parameter can be used to allow keying material to be included
-	 * in debug messages. This is a security risk and this option should
-	 * not be enabled in normal configuration. If needed during
-	 * development or while troubleshooting, this option can provide more
-	 * details for figuring out what is happening.
-	 */
-	int wpa_debug_show_keys;
-
-	/**
-	 * wpa_debug_timestamp - Whether to include timestamp in debug messages
-	 */
-	int wpa_debug_timestamp;
-
-	/**
-	 * ctrl_interface - Global ctrl_iface path/parameter
-	 */
-	char *ctrl_interface;
-
-	/**
-	 * dbus_ctrl_interface - Enable the DBus control interface
-	 */
-	int dbus_ctrl_interface;
-
-	/**
-	 * wpa_debug_file_path - Path of debug file or %NULL to use stdout
-	 */
-	const char *wpa_debug_file_path;
-};
-
-/**
- * struct wpa_global - Internal, global data for all %wpa_supplicant interfaces
- *
- * This structure is initialized by calling wpa_supplicant_init() when starting
- * %wpa_supplicant.
- */
-struct wpa_global {
-	struct wpa_supplicant *ifaces;
-	struct wpa_params params;
-	struct ctrl_iface_global_priv *ctrl_iface;
-	struct ctrl_iface_dbus_priv *dbus_ctrl_iface;
-};
-
-
-struct wpa_client_mlme {
-#ifdef CONFIG_CLIENT_MLME
-	enum {
-		IEEE80211_DISABLED, IEEE80211_AUTHENTICATE,
-		IEEE80211_ASSOCIATE, IEEE80211_ASSOCIATED,
-		IEEE80211_IBSS_SEARCH, IEEE80211_IBSS_JOINED
-	} state;
-	u8 prev_bssid[ETH_ALEN];
-	u8 ssid[32];
-	size_t ssid_len;
-	u16 aid;
-	u16 ap_capab, capab;
-	u8 *extra_ie; /* to be added to the end of AssocReq */
-	size_t extra_ie_len;
-	wpa_key_mgmt key_mgmt;
-
-	/* The last AssocReq/Resp IEs */
-	u8 *assocreq_ies, *assocresp_ies;
-	size_t assocreq_ies_len, assocresp_ies_len;
-
-	int auth_tries, assoc_tries;
-
-	unsigned int ssid_set:1;
-	unsigned int bssid_set:1;
-	unsigned int prev_bssid_set:1;
-	unsigned int authenticated:1;
-	unsigned int associated:1;
-	unsigned int probereq_poll:1;
-	unsigned int use_protection:1;
-	unsigned int create_ibss:1;
-	unsigned int mixed_cell:1;
-	unsigned int wmm_enabled:1;
-
-	struct os_time last_probe;
-
-#define IEEE80211_AUTH_ALG_OPEN BIT(0)
-#define IEEE80211_AUTH_ALG_SHARED_KEY BIT(1)
-#define IEEE80211_AUTH_ALG_LEAP BIT(2)
-	unsigned int auth_algs; /* bitfield of allowed auth algs */
-	int auth_alg; /* currently used IEEE 802.11 authentication algorithm */
-	int auth_transaction;
-
-	struct os_time ibss_join_req;
-	u8 *probe_resp; /* ProbeResp template for IBSS */
-	size_t probe_resp_len;
-	u32 supp_rates_bits;
-
-	int wmm_last_param_set;
-
-	int sta_scanning;
-	int scan_hw_mode_idx;
-	int scan_channel_idx;
-	enum { SCAN_SET_CHANNEL, SCAN_SEND_PROBE } scan_state;
-	struct os_time last_scan_completed;
-	int scan_oper_channel;
-	int scan_oper_freq;
-	int scan_oper_phymode;
-	u8 scan_ssid[32];
-	size_t scan_ssid_len;
-	int scan_skip_11b;
-
-	struct ieee80211_sta_bss *sta_bss_list;
-#define STA_HASH_SIZE 256
-#define STA_HASH(sta) (sta[5])
-	struct ieee80211_sta_bss *sta_bss_hash[STA_HASH_SIZE];
-
-	int cts_protect_erp_frames;
-
-	int phymode; /* current mode; WPA_MODE_IEEE80211A, .. */
-	struct wpa_hw_modes *modes;
-	size_t num_modes;
-	unsigned int hw_modes; /* bitfield of allowed hardware modes;
-				* (1 << MODE_*) */
-	int num_curr_rates;
-	struct wpa_rate_data *curr_rates;
-	int freq; /* The current frequency in MHz */
-	int channel; /* The current IEEE 802.11 channel number */
-#else /* CONFIG_CLIENT_MLME */
-	int dummy; /* to keep MSVC happy */
-#endif /* CONFIG_CLIENT_MLME */
-};
+#define BROADCAST_SSID_SCAN ((struct wpa_ssid *) 1)
 
 /**
  * struct wpa_supplicant - Internal data for wpa_supplicant interface
@@ -268,15 +39,11 @@ struct wpa_client_mlme {
  * core functions.
  */
 struct wpa_supplicant {
-	struct wpa_global *global;
 	struct wpa_supplicant *next;
 	struct l2_packet_data *l2;
 	struct l2_packet_data *l2_br;
 	unsigned char own_addr[ETH_ALEN];
 	char ifname[100];
-#ifdef CONFIG_CTRL_IFACE_DBUS
-	char *dbus_path;
-#endif /* CONFIG_CTRL_IFACE_DBUS */
 	char bridge_ifname[16];
 
 	char *confname;
@@ -305,7 +72,7 @@ struct wpa_supplicant {
 					  * BROADCAST_SSID_SCAN = broadcast
 					  * SSID was used in the previous scan
 					  */
-#define BROADCAST_SSID_SCAN ((struct wpa_ssid *) 1)
+
 
 	struct wpa_scan_result *scan_results;
 	int num_scan_results;
@@ -314,9 +81,6 @@ struct wpa_supplicant {
 	int interface_removed; /* whether the network interface has been
 				* removed */
 	struct wpa_sm *wpa;
-	struct eapol_sm *eapol;
-
-	struct ctrl_iface_priv *ctrl_iface;
 
 	wpa_states wpa_state;
 	int new_connection;
@@ -325,7 +89,6 @@ struct wpa_supplicant {
 	int eapol_received; /* number of EAPOL packets received after the
 			     * previous association event */
 
-	struct scard_data *scard;
 
 	unsigned char last_eapol_src[ETH_ALEN];
 
@@ -339,24 +102,19 @@ struct wpa_supplicant {
 			     * results without a new scan request; this is used
 			     * to speed up the first association if the driver
 			     * has already available scan results. */
-
-	struct wpa_client_mlme mlme;
-	int use_client_mlme;
 };
 
 
 /* wpa_supplicant.c */
 void wpa_supplicant_cancel_scan(struct wpa_supplicant *wpa_s);
 
-int wpa_supplicant_reload_configuration(struct wpa_supplicant *wpa_s);
 
 const char * wpa_supplicant_state_txt(int state);
 int wpa_supplicant_driver_init(struct wpa_supplicant *wpa_s,
 			       int wait_for_interface);
 struct wpa_blacklist * wpa_blacklist_get(struct wpa_supplicant *wpa_s,
 					 const u8 *bssid);
-int wpa_blacklist_add(struct wpa_supplicant *wpa_s, const u8 *bssid);
-void wpa_blacklist_clear(struct wpa_supplicant *wpa_s);
+
 int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 			      struct wpa_scan_result *bss,
 			      struct wpa_ssid *ssid,
@@ -366,7 +124,6 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 			      struct wpa_ssid *ssid);
 void wpa_supplicant_set_non_wpa_policy(struct wpa_supplicant *wpa_s,
 				       struct wpa_ssid *ssid);
-void wpa_supplicant_initiate_eapol(struct wpa_supplicant *wpa_s);
 int wpa_supplicant_get_scan_results(struct wpa_supplicant *wpa_s);
 void wpa_clear_keys(struct wpa_supplicant *wpa_s, const u8 *addr);
 void wpa_supplicant_req_auth_timeout(struct wpa_supplicant *wpa_s,
@@ -382,18 +139,11 @@ void wpa_supplicant_req_scan(struct wpa_supplicant *wpa_s, int sec, int usec);
 
 void wpa_show_license(void);
 
-struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
-						 struct wpa_interface *iface);
-int wpa_supplicant_remove_iface(struct wpa_global *global,
-				struct wpa_supplicant *wpa_s);
-struct wpa_supplicant * wpa_supplicant_get_iface(struct wpa_global *global,
-						 const char *ifname);
-struct wpa_global * wpa_supplicant_init(struct wpa_params *params);
-int wpa_supplicant_run(struct wpa_global *global);
-void wpa_supplicant_deinit(struct wpa_global *global);
+struct wpa_supplicant *wpa_supplicant_init(void);
+void wpa_supplicant_deinit(struct wpa_supplicant *wpa_s);
+int wpa_supplicant_run(struct wpa_supplicant *wpa_s);
+void wpa_supplicant_deinit(struct wpa_supplicant *wpa_s);
 
-int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
-			      struct wpa_ssid *ssid);
 
 /* events.c */
 void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s);
