@@ -832,12 +832,6 @@ wpa_states wpa_supplicant_get_state(struct wpa_supplicant *wpa_s)
 static void wpa_supplicant_terminate(int sig, void *eloop_ctx,
 				     void *signal_ctx)
 {
-	struct wpa_global *global = eloop_ctx;
-	struct wpa_supplicant *wpa_s;
-	for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next) {
-		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_TERMINATING "- signal %d "
-			"received", sig);
-	}
 	eloop_terminate();
 }
 
