@@ -1967,62 +1967,6 @@ int wpa_supplicant_driver_init(struct wpa_supplicant *wpa_s,
 }
 
 
-static struct wpa_supplicant * wpa_supplicant_alloc(void)
-{
-	struct wpa_supplicant *wpa_s;
-
-	wpa_s = os_zalloc(sizeof(*wpa_s));
-	if (wpa_s == NULL)
-		return NULL;
-	wpa_s->scan_req = 1;
-
-	return wpa_s;
-}
-
-
-static int wpa_supplicant_init_iface(struct wpa_supplicant *wpa_s,
-				     struct wpa_interface *iface)
-{
-	wpa_printf(MSG_DEBUG, "Initializing interface '%s' conf '%s' driver "
-		   "'%s' ctrl_interface '%s' bridge '%s'", iface->ifname,
-		   iface->confname ? iface->confname : "N/A",
-		   iface->driver ? iface->driver : "default",
-		   iface->ctrl_interface ? iface->ctrl_interface : "N/A",
-		   iface->bridge_ifname ? iface->bridge_ifname : "N/A");
-
-	if (wpa_supplicant_set_driver(wpa_s, iface->driver) < 0) {
-		return -1;
-	}
-
-	if (wpa_s->conf == NULL) {
-		wpa_printf(MSG_ERROR, "\nNo configuration found.");
-		return -1;
-	}
-
-	if (iface->ifname == NULL) {
-		wpa_printf(MSG_ERROR, "\nInterface name is required.");
-		return -1;
-	}
-	if (os_strlen(iface->ifname) >= sizeof(wpa_s->ifname)) {
-		wpa_printf(MSG_ERROR, "\nToo long interface name '%s'.",
-			   iface->ifname);
-		return -1;
-	}
-	os_strncpy(wpa_s->ifname, iface->ifname, sizeof(wpa_s->ifname));
-
-	if (iface->bridge_ifname) {
-		if (os_strlen(iface->bridge_ifname) >=
-		    sizeof(wpa_s->bridge_ifname)) {
-			wpa_printf(MSG_ERROR, "\nToo long bridge interface "
-				   "name '%s'.", iface->bridge_ifname);
-			return -1;
-		}
-		os_strncpy(wpa_s->bridge_ifname, iface->bridge_ifname,
-			   sizeof(wpa_s->bridge_ifname));
-	}
-
-	return 0;
-}
 
 
 static int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s)
@@ -2098,105 +2042,6 @@ static int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s)
 }
 
 
-static int wpa_supplicant_init_iface2(struct wpa_supplicant *wpa_s,
-				      int wait_for_interface)
-{
-	const char *ifname;
-	struct wpa_driver_capa capa;
-
-	wpa_printf(MSG_DEBUG, "Initializing interface (2) '%s'",
-		   wpa_s->ifname);
-
-	if (wpa_supplicant_init_eapol(wpa_s) < 0)
-		return -1;
-
-	/* RSNA Supplicant Key Management - INITIALIZE */
-	eapol_sm_notify_portEnabled(wpa_s->eapol, FALSE);
-	eapol_sm_notify_portValid(wpa_s->eapol, FALSE);
-
-	/* Initialize driver interface and register driver event handler before
-	 * L2 receive handler so that association events are processed before
-	 * EAPOL-Key packets if both become available for the same select()
-	 * call. */
-	wpa_s->drv_priv = wpa_drv_init(wpa_s, wpa_s->ifname);
-	if (wpa_s->drv_priv == NULL) {
-		wpa_printf(MSG_ERROR, "Failed to initialize driver interface");
-		return -1;
-	}
-	if (wpa_drv_set_param(wpa_s, wpa_s->conf->driver_param) < 0) {
-		wpa_printf(MSG_ERROR, "Driver interface rejected "
-			   "driver_param '%s'", wpa_s->conf->driver_param);
-		return -1;
-	}
-
-	ifname = wpa_drv_get_ifname(wpa_s);
-	if (ifname && os_strcmp(ifname, wpa_s->ifname) != 0) {
-		wpa_printf(MSG_DEBUG, "Driver interface replaced interface "
-			   "name with '%s'", ifname);
-		os_strncpy(wpa_s->ifname, ifname, sizeof(wpa_s->ifname));
-	}
-
-	if (wpa_supplicant_init_wpa(wpa_s) < 0)
-		return -1;
-
-	wpa_sm_set_ifname(wpa_s->wpa, wpa_s->ifname,
-			  wpa_s->bridge_ifname[0] ? wpa_s->bridge_ifname :
-			  NULL);
-	wpa_sm_set_fast_reauth(wpa_s->wpa, wpa_s->conf->fast_reauth);
-	wpa_sm_set_eapol(wpa_s->wpa, wpa_s->eapol);
-
-	if (wpa_s->conf->dot11RSNAConfigPMKLifetime &&
-	    wpa_sm_set_param(wpa_s->wpa, RSNA_PMK_LIFETIME,
-			     wpa_s->conf->dot11RSNAConfigPMKLifetime)) {
-		wpa_printf(MSG_ERROR, "Invalid WPA parameter value for "
-			   "dot11RSNAConfigPMKLifetime");
-		return -1;
-	}
-
-	if (wpa_s->conf->dot11RSNAConfigPMKReauthThreshold &&
-	    wpa_sm_set_param(wpa_s->wpa, RSNA_PMK_REAUTH_THRESHOLD,
-			     wpa_s->conf->dot11RSNAConfigPMKReauthThreshold)) {
-		wpa_printf(MSG_ERROR, "Invalid WPA parameter value for "
-			"dot11RSNAConfigPMKReauthThreshold");
-		return -1;
-	}
-
-	if (wpa_s->conf->dot11RSNAConfigSATimeout &&
-	    wpa_sm_set_param(wpa_s->wpa, RSNA_SA_TIMEOUT,
-			     wpa_s->conf->dot11RSNAConfigSATimeout)) {
-		wpa_printf(MSG_ERROR, "Invalid WPA parameter value for "
-			   "dot11RSNAConfigSATimeout");
-		return -1;
-	}
-
-	if (wpa_supplicant_driver_init(wpa_s, wait_for_interface) < 0) {
-		return -1;
-	}
-	wpa_sm_set_own_addr(wpa_s->wpa, wpa_s->own_addr);
-
-	wpa_s->ctrl_iface = wpa_supplicant_ctrl_iface_init(wpa_s);
-	if (wpa_s->ctrl_iface == NULL) {
-		wpa_printf(MSG_ERROR,
-			   "Failed to initialize control interface '%s'.\n"
-			   "You may have another wpa_supplicant process "
-			   "already running or the file was\n"
-			   "left by an unclean termination of wpa_supplicant "
-			   "in which case you will need\n"
-			   "to manually remove this file before starting "
-			   "wpa_supplicant again.\n",
-			   wpa_s->conf->ctrl_interface);
-		return -1;
-	}
-
-	if (wpa_drv_get_capa(wpa_s, &capa) == 0 &&
-	    capa.flags & WPA_DRIVER_FLAGS_USER_SPACE_MLME) {
-		wpa_s->use_client_mlme = 1;
-		if (ieee80211_sta_init(wpa_s))
-			return -1;
-	}
-
-	return 0;
-}
 
 
 static void wpa_supplicant_deinit_iface(struct wpa_supplicant *wpa_s)
@@ -2225,107 +2070,6 @@ static void wpa_supplicant_deinit_iface(struct wpa_supplicant *wpa_s)
 
 
 /**
- * wpa_supplicant_add_iface - Add a new network interface
- * @global: Pointer to global data from wpa_supplicant_init()
- * @iface: Interface configuration options
- * Returns: Pointer to the created interface or %NULL on failure
- *
- * This function is used to add new network interfaces for %wpa_supplicant.
- * This can be called before wpa_supplicant_run() to add interfaces before the
- * main event loop has been started. In addition, new interfaces can be added
- * dynamically while %wpa_supplicant is already running. This could happen,
- * e.g., when a hotplug network adapter is inserted.
- */
-struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
-						 struct wpa_interface *iface)
-{
-	struct wpa_supplicant *wpa_s;
-
-	if (global == NULL || iface == NULL)
-		return NULL;
-
-	wpa_s = wpa_supplicant_alloc();
-	if (wpa_s == NULL)
-		return NULL;
-
-	if (wpa_supplicant_init_iface(wpa_s, iface) ||
-	    wpa_supplicant_init_iface2(wpa_s,
-				       global->params.wait_for_interface)) {
-		wpa_printf(MSG_DEBUG, "Failed to add interface %s",
-			   iface->ifname);
-		wpa_supplicant_deinit_iface(wpa_s);
-		os_free(wpa_s);
-		return NULL;
-	}
-
-	wpa_s->global = global;
-
-	wpa_s->next = global->ifaces;
-	global->ifaces = wpa_s;
-
-	wpa_printf(MSG_DEBUG, "Added interface %s", wpa_s->ifname);
-
-	return wpa_s;
-}
-
-
-/**
- * wpa_supplicant_remove_iface - Remove a network interface
- * @global: Pointer to global data from wpa_supplicant_init()
- * @wpa_s: Pointer to the network interface to be removed
- * Returns: 0 if interface was removed, -1 if interface was not found
- *
- * This function can be used to dynamically remove network interfaces from
- * %wpa_supplicant, e.g., when a hotplug network adapter is ejected. In
- * addition, this function is used to remove all remaining interfaces when
- * %wpa_supplicant is terminated.
- */
-int wpa_supplicant_remove_iface(struct wpa_global *global,
-				struct wpa_supplicant *wpa_s)
-{
-	struct wpa_supplicant *prev;
-
-	/* Remove interface from the global list of interfaces */
-	prev = global->ifaces;
-	if (prev == wpa_s) {
-		global->ifaces = wpa_s->next;
-	} else {
-		while (prev && prev->next != wpa_s)
-			prev = prev->next;
-		if (prev == NULL)
-			return -1;
-		prev->next = wpa_s->next;
-	}
-
-	wpa_printf(MSG_DEBUG, "Removing interface %s", wpa_s->ifname);
-
-	wpa_supplicant_deinit_iface(wpa_s);
-	os_free(wpa_s);
-
-	return 0;
-}
-
-
-/**
- * wpa_supplicant_get_iface - Get a new network interface
- * @global: Pointer to global data from wpa_supplicant_init()
- * @ifname: Interface name
- * Returns: Pointer to the interface or %NULL if not found
- */
-struct wpa_supplicant * wpa_supplicant_get_iface(struct wpa_global *global,
-						 const char *ifname)
-{
-	struct wpa_supplicant *wpa_s;
-
-	for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next) {
-		if (os_strcmp(wpa_s->ifname, ifname) == 0)
-			return wpa_s;
-	}
-	return NULL;
-}
-
-
-/**
  * wpa_supplicant_init - Initialize %wpa_supplicant
  * @params: Parameters for %wpa_supplicant
  * Returns: Pointer to global %wpa_supplicant data, or %NULL on failure
@@ -2334,57 +2078,59 @@ struct wpa_supplicant * wpa_supplicant_get_iface(struct wpa_global *global,
  * initialization, the returned data pointer can be used to add and remove
  * network interfaces, and eventually, to deinitialize %wpa_supplicant.
  */
-struct wpa_global * wpa_supplicant_init(struct wpa_params *params)
+struct wpa_supplicant *wpa_supplicant_init(void)
 {
-	struct wpa_global *global;
+	struct wpa_supplicant *wpa_s = NULL;
 	int ret;
 
-	if (params == NULL)
+	wpa_s = os_zalloc(sizeof(*wpa_s));
+	if (wpa_s == NULL)
 		return NULL;
-
-	wpa_debug_open_file(params->wpa_debug_file_path);
-
-	ret = eap_peer_register_methods();
-	if (ret) {
-		wpa_printf(MSG_ERROR, "Failed to register EAP methods");
-		if (ret == -2)
-			wpa_printf(MSG_ERROR, "Two or more EAP methods used "
-				   "the same EAP type.");
-		return NULL;
-	}
-
-	global = os_zalloc(sizeof(*global));
-	if (global == NULL)
-		return NULL;
-	global->params.daemonize = params->daemonize;
-	global->params.wait_for_interface = params->wait_for_interface;
-	global->params.wait_for_monitor = params->wait_for_monitor;
-	global->params.dbus_ctrl_interface = params->dbus_ctrl_interface;
-	if (params->pid_file)
-		global->params.pid_file = os_strdup(params->pid_file);
-	if (params->ctrl_interface)
-		global->params.ctrl_interface =
-			os_strdup(params->ctrl_interface);
-	wpa_debug_level = global->params.wpa_debug_level =
-		params->wpa_debug_level;
-	wpa_debug_show_keys = global->params.wpa_debug_show_keys =
-		params->wpa_debug_show_keys;
-	wpa_debug_timestamp = global->params.wpa_debug_timestamp =
-		params->wpa_debug_timestamp;
-
-	if (eloop_init(global)) {
+	/* 1. eloop int */
+	if (eloop_init(wpa_s)) {
 		wpa_printf(MSG_ERROR, "Failed to initialize event loop");
-		wpa_supplicant_deinit(global);
+		return NULL;
+	}
+	/* 2. set driver  driver name is */
+	if (wpa_supplicant_set_driver(wpa_s, NULL) < 0) {
 		return NULL;
 	}
 
-	global->ctrl_iface = wpa_supplicant_global_ctrl_iface_init(global);
-	if (global->ctrl_iface == NULL) {
-		wpa_supplicant_deinit(global);
+	/* 3. get config name and read it to get config msg , but we not support, so do nothing */
+
+	/* TODO */
+
+
+	/* 4. init eapol for wpa_s if need it */
+
+
+	/* 5. init driver prv before get l2 packet */
+
+	/* Initialize driver interface and register driver event handler before
+	 * L2 receive handler so that association events are processed before
+	 * EAPOL-Key packets if both become available for the same select()
+	 * call. */
+	wpa_s->drv_priv = wpa_drv_init(wpa_s, wpa_s->ifname);
+	if (wpa_s->drv_priv == NULL) {
+		wpa_printf(MSG_ERROR, "Failed to initialize driver interface");
 		return NULL;
 	}
+	/* 6. init wpa state */
+	if (wpa_supplicant_init_wpa(wpa_s) < 0)
+		return NULL;
 
-	return global;
+	/* 7. get mac addr and wifi capa etc. */
+	/*TODO */
+
+	wpa_sm_set_own_addr(wpa_s->wpa, wpa_s->own_addr);
+
+	/* 8. init l2 interface and register recvie func callback */
+	wpa_s->l2 = l2_packet_init(wpa_s->ifname,
+					   wpa_drv_get_mac_addr(wpa_s),
+					   ETH_P_EAPOL,
+					   wpa_supplicant_rx_eapol, wpa_s, 0);
+
+	return wpa_s;
 }
 
 
@@ -2397,49 +2143,14 @@ struct wpa_global * wpa_supplicant_init(struct wpa_params *params)
  * there are any remaining events. In most cases, this function is running as
  * long as the %wpa_supplicant process in still in use.
  */
-int wpa_supplicant_run(struct wpa_global *global)
+int wpa_supplicant_run(struct wpa_supplicant *wpa_s)
 {
-	struct wpa_supplicant *wpa_s;
-
-	if (global->params.wait_for_monitor) {
-		for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next)
-			if (wpa_s->ctrl_iface)
-				wpa_supplicant_ctrl_iface_wait(
-					wpa_s->ctrl_iface);
-	}
-
-	eloop_register_signal_terminate(wpa_supplicant_terminate, NULL);
-
 	eloop_run();
-
 	return 0;
 }
 
-
-/**
- * wpa_supplicant_deinit - Deinitialize %wpa_supplicant
- * @global: Pointer to global data from wpa_supplicant_init()
- *
- * This function is called to deinitialize %wpa_supplicant and to free all
- * allocated resources. Remaining network interfaces will also be removed.
- */
-void wpa_supplicant_deinit(struct wpa_global *global)
+void wpa_supplicant_deinit(struct wpa_supplicant *wpa_s)
 {
-	if (global == NULL)
-		return;
-
-	while (global->ifaces)
-		wpa_supplicant_remove_iface(global, global->ifaces);
-
-	if (global->ctrl_iface)
-		wpa_supplicant_global_ctrl_iface_deinit(global->ctrl_iface);
-
-	eap_peer_unregister_methods();
-
-	eloop_destroy();
-
-	os_free(global->params.ctrl_interface);
-
-	os_free(global);
-	wpa_debug_close_file();
+	/*TODO */
+	return ;
 }

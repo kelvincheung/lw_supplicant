@@ -37,144 +37,7 @@ struct ctrl_iface_priv;
 struct ctrl_iface_global_priv;
 struct ctrl_iface_dbus_priv;
 
-/**
- * struct wpa_interface - Parameters for wpa_supplicant_add_iface()
- */
-struct wpa_interface {
-	/**
-	 * confname - Configuration name (file or profile) name
-	 *
-	 * This can also be %NULL when a configuration file is not used. In
-	 * that case, ctrl_interface must be set to allow the interface to be
-	 * configured.
-	 */
-	const char *confname;
 
-	/**
-	 * ctrl_interface - Control interface parameter
-	 *
-	 * If a configuration file is not used, this variable can be used to
-	 * set the ctrl_interface parameter that would have otherwise been read
-	 * from the configuration file. If both confname and ctrl_interface are
-	 * set, ctrl_interface is used to override the value from configuration
-	 * file.
-	 */
-	const char *ctrl_interface;
-
-	/**
-	 * driver - Driver interface name, or %NULL to use the default driver
-	 */
-	const char *driver;
-
-	/**
-	 * driver_param - Driver interface parameters
-	 *
-	 * If a configuration file is not used, this variable can be used to
-	 * set the driver_param parameters that would have otherwise been read
-	 * from the configuration file. If both confname and driver_param are
-	 * set, driver_param is used to override the value from configuration
-	 * file.
-	 */
-	const char *driver_param;
-
-	/**
-	 * ifname - Interface name
-	 */
-	const char *ifname;
-
-	/**
-	 * bridge_ifname - Optional bridge interface name
-	 *
-	 * If the driver interface (ifname) is included in a Linux bridge
-	 * device, the bridge interface may need to be used for receiving EAPOL
-	 * frames. This can be enabled by setting this variable to enable
-	 * receiving of EAPOL frames from an additional interface.
-	 */
-	const char *bridge_ifname;
-};
-
-/**
- * struct wpa_params - Parameters for wpa_supplicant_init()
- */
-struct wpa_params {
-	/**
-	 * daemonize - Run %wpa_supplicant in the background
-	 */
-	int daemonize;
-
-	/**
-	 * wait_for_interface - Wait for the network interface to appear
-	 *
-	 * If set, %wpa_supplicant will wait until all the configured network
-	 * interfaces are available before starting processing. Please note
-	 * that in many cases, a better alternative would be to start
-	 * %wpa_supplicant without network interfaces and add the interfaces
-	 * dynamically whenever they become available.
-	 */
-	int wait_for_interface;
-
-	/**
-	 * wait_for_monitor - Wait for a monitor program before starting
-	 */
-	int wait_for_monitor;
-
-	/**
-	 * pid_file - Path to a PID (process ID) file
-	 *
-	 * If this and daemonize are set, process ID of the background process
-	 * will be written to the specified file.
-	 */
-	char *pid_file;
-
-	/**
-	 * wpa_debug_level - Debugging verbosity level (e.g., MSG_INFO)
-	 */
-	int wpa_debug_level;
-
-	/**
-	 * wpa_debug_show_keys - Whether keying material is included in debug
-	 *
-	 * This parameter can be used to allow keying material to be included
-	 * in debug messages. This is a security risk and this option should
-	 * not be enabled in normal configuration. If needed during
-	 * development or while troubleshooting, this option can provide more
-	 * details for figuring out what is happening.
-	 */
-	int wpa_debug_show_keys;
-
-	/**
-	 * wpa_debug_timestamp - Whether to include timestamp in debug messages
-	 */
-	int wpa_debug_timestamp;
-
-	/**
-	 * ctrl_interface - Global ctrl_iface path/parameter
-	 */
-	char *ctrl_interface;
-
-	/**
-	 * dbus_ctrl_interface - Enable the DBus control interface
-	 */
-	int dbus_ctrl_interface;
-
-	/**
-	 * wpa_debug_file_path - Path of debug file or %NULL to use stdout
-	 */
-	const char *wpa_debug_file_path;
-};
-
-/**
- * struct wpa_global - Internal, global data for all %wpa_supplicant interfaces
- *
- * This structure is initialized by calling wpa_supplicant_init() when starting
- * %wpa_supplicant.
- */
-struct wpa_global {
-	struct wpa_supplicant *ifaces;
-	struct wpa_params params;
-	struct ctrl_iface_global_priv *ctrl_iface;
-	struct ctrl_iface_dbus_priv *dbus_ctrl_iface;
-};
 
 
 struct wpa_client_mlme {
@@ -268,7 +131,6 @@ struct wpa_client_mlme {
  * core functions.
  */
 struct wpa_supplicant {
-	struct wpa_global *global;
 	struct wpa_supplicant *next;
 	struct l2_packet_data *l2;
 	struct l2_packet_data *l2_br;
@@ -382,15 +244,9 @@ void wpa_supplicant_req_scan(struct wpa_supplicant *wpa_s, int sec, int usec);
 
 void wpa_show_license(void);
 
-struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
-						 struct wpa_interface *iface);
-int wpa_supplicant_remove_iface(struct wpa_global *global,
-				struct wpa_supplicant *wpa_s);
-struct wpa_supplicant * wpa_supplicant_get_iface(struct wpa_global *global,
-						 const char *ifname);
-struct wpa_global * wpa_supplicant_init(struct wpa_params *params);
-int wpa_supplicant_run(struct wpa_global *global);
-void wpa_supplicant_deinit(struct wpa_global *global);
+struct wpa_supplicant *wpa_supplicant_init(void);
+int wpa_supplicant_run(struct wpa_supplicant *wpa_s);
+void wpa_supplicant_deinit(struct wpa_supplicant *wpa_s);
 
 int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
 			      struct wpa_ssid *ssid);
