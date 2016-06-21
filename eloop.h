@@ -23,6 +23,8 @@
 #ifndef ELOOP_H
 #define ELOOP_H
 
+#define MAX_TIMER_COUNT   32
+
 /**
  * ELOOP_ALL_CTX - eloop_cancel_timeout() magic number to match all timeouts
  */
@@ -85,86 +87,7 @@ typedef void (*eloop_signal_handler)(int sig, void *eloop_ctx,
  */
 int eloop_init(void *user_data);
 
-/**
- * eloop_register_read_sock - Register handler for read events
- * @sock: File descriptor number for the socket
- * @handler: Callback function to be called when data is available for reading
- * @eloop_data: Callback context data (eloop_ctx)
- * @user_data: Callback context data (sock_ctx)
- * Returns: 0 on success, -1 on failure
- *
- * Register a read socket notifier for the given file descriptor. The handler
- * function will be called whenever data is available for reading from the
- * socket. The handler function is responsible for clearing the event after
- * having processed it in order to avoid eloop from calling the handler again
- * for the same event.
- */
-int eloop_register_read_sock(int sock, eloop_sock_handler handler,
-			     void *eloop_data, void *user_data);
 
-/**
- * eloop_unregister_read_sock - Unregister handler for read events
- * @sock: File descriptor number for the socket
- *
- * Unregister a read socket notifier that was previously registered with
- * eloop_register_read_sock().
- */
-void eloop_unregister_read_sock(int sock);
-
-/**
- * eloop_register_sock - Register handler for socket events
- * @sock: File descriptor number for the socket
- * @type: Type of event to wait for
- * @handler: Callback function to be called when the event is triggered
- * @eloop_data: Callback context data (eloop_ctx)
- * @user_data: Callback context data (sock_ctx)
- * Returns: 0 on success, -1 on failure
- *
- * Register an event notifier for the given socket's file descriptor. The
- * handler function will be called whenever the that event is triggered for the
- * socket. The handler function is responsible for clearing the event after
- * having processed it in order to avoid eloop from calling the handler again
- * for the same event.
- */
-int eloop_register_sock(int sock, eloop_event_type type,
-			eloop_sock_handler handler,
-			void *eloop_data, void *user_data);
-
-/**
- * eloop_unregister_sock - Unregister handler for socket events
- * @sock: File descriptor number for the socket
- * @type: Type of event for which sock was registered
- *
- * Unregister a socket event notifier that was previously registered with
- * eloop_register_sock().
- */
-void eloop_unregister_sock(int sock, eloop_event_type type);
-
-/**
- * eloop_register_event - Register handler for generic events
- * @event: Event to wait (eloop implementation specific)
- * @event_size: Size of event data
- * @handler: Callback function to be called when event is triggered
- * @eloop_data: Callback context data (eloop_data)
- * @user_data: Callback context data (user_data)
- * Returns: 0 on success, -1 on failure
- *
- * Register an event handler for the given event. This function is used to
- * register eloop implementation specific events which are mainly targetted for
- * operating system specific code (driver interface and l2_packet) since the
- * portable code will not be able to use such an OS-specific call. The handler
- * function will be called whenever the event is triggered. The handler
- * function is responsible for clearing the event after having processed it in
- * order to avoid eloop from calling the handler again for the same event.
- *
- * In case of Windows implementation (eloop_win.c), event pointer is of HANDLE
- * type, i.e., void*. The callers are likely to have 'HANDLE h' type variable,
- * and they would call this function with eloop_register_event(h, sizeof(h),
- * ...).
- */
-int eloop_register_event(void *event, size_t event_size,
-			 eloop_event_handler handler,
-			 void *eloop_data, void *user_data);
 
 /**
  * eloop_unregister_event - Unregister handler for a generic event
@@ -323,18 +246,6 @@ void eloop_destroy(void);
  */
 int eloop_terminated(void);
 
-/**
- * eloop_wait_for_read_sock - Wait for a single reader
- * @sock: File descriptor number for the socket
- *
- * Do a blocking wait for a single read socket.
- */
-void eloop_wait_for_read_sock(int sock);
 
-/**
- * eloop_get_user_data - Get global user data
- * Returns: user_data pointer that was registered with eloop_init()
- */
-void * eloop_get_user_data(void);
 
 #endif /* ELOOP_H */

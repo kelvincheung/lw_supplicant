@@ -15,7 +15,6 @@
 #include "includes.h"
 
 #include "common.h"
-#include "eapol_sm.h"
 #include "wpa.h"
 #include "eloop.h"
 #include "wpa_supplicant.h"
@@ -24,7 +23,6 @@
 #include "wpa_supplicant_i.h"
 #include "preauth.h"
 #include "pmksa_cache.h"
-#include "wpa_ctrl.h"
 #include "eap.h"
 
 
@@ -59,11 +57,9 @@ static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s)
 		wpa_supplicant_set_non_wpa_policy(wpa_s, ssid);
 	}
 
-	if (wpa_s->current_ssid && wpa_s->current_ssid != ssid)
-		eapol_sm_invalidate_cached_session(wpa_s->eapol);
+
 	wpa_s->current_ssid = ssid;
 	wpa_sm_set_config(wpa_s->wpa, wpa_s->current_ssid);
-	wpa_supplicant_initiate_eapol(wpa_s);
 
 	return 0;
 }
@@ -88,10 +84,6 @@ void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s)
 	wpa_supplicant_set_state(wpa_s, WPA_DISCONNECTED);
 	os_memset(wpa_s->bssid, 0, ETH_ALEN);
 	os_memset(wpa_s->pending_bssid, 0, ETH_ALEN);
-	eapol_sm_notify_portEnabled(wpa_s->eapol, FALSE);
-	eapol_sm_notify_portValid(wpa_s->eapol, FALSE);
-	if (wpa_s->key_mgmt == WPA_KEY_MGMT_PSK)
-		eapol_sm_notify_eap_success(wpa_s->eapol, FALSE);
 }
 
 
@@ -105,11 +97,8 @@ static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s)
 		return;
 
 	for (i = 0; i < ie.num_pmkid; i++) {
-		pmksa_set = pmksa_cache_set_current(wpa_s->wpa,
-						    ie.pmkid + i * PMKID_LEN,
-						    NULL, NULL, 0);
+
 		if (pmksa_set == 0) {
-			eapol_sm_notify_pmkid_attempt(wpa_s->eapol, 1);
 			break;
 		}
 	}
@@ -119,114 +108,16 @@ static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s)
 }
 
 
-static void wpa_supplicant_event_pmkid_candidate(struct wpa_supplicant *wpa_s,
-						 union wpa_event_data *data)
-{
-	if (data == NULL) {
-		wpa_printf(MSG_DEBUG, "RSN: No data in PMKID candidate event");
-		return;
-	}
-	wpa_printf(MSG_DEBUG, "RSN: PMKID candidate event - bssid=" MACSTR
-		   " index=%d preauth=%d",
-		   MAC2STR(data->pmkid_candidate.bssid),
-		   data->pmkid_candidate.index,
-		   data->pmkid_candidate.preauth);
-
-	pmksa_candidate_add(wpa_s->wpa, data->pmkid_candidate.bssid,
-			    data->pmkid_candidate.index,
-			    data->pmkid_candidate.preauth);
-}
-
 
 static int wpa_supplicant_dynamic_keys(struct wpa_supplicant *wpa_s)
 {
 	if (wpa_s->key_mgmt == WPA_KEY_MGMT_NONE ||
 	    wpa_s->key_mgmt == WPA_KEY_MGMT_WPA_NONE)
 		return 0;
-
-#ifdef IEEE8021X_EAPOL
-	if (wpa_s->key_mgmt == WPA_KEY_MGMT_IEEE8021X_NO_WPA &&
-	    wpa_s->current_ssid &&
-	    !(wpa_s->current_ssid->eapol_flags &
-	      (EAPOL_FLAG_REQUIRE_KEY_UNICAST |
-	       EAPOL_FLAG_REQUIRE_KEY_BROADCAST))) {
-		/* IEEE 802.1X, but not using dynamic WEP keys (i.e., either
-		 * plaintext or static WEP keys). */
-		return 0;
-	}
-#endif /* IEEE8021X_EAPOL */
-
 	return 1;
 }
 
 
-/**
- * wpa_supplicant_scard_init - Initialize SIM/USIM access with PC/SC
- * @wpa_s: pointer to wpa_supplicant data
- * @ssid: Configuration data for the network
- * Returns: 0 on success, -1 on failure
- *
- * This function is called when starting authentication with a network that is
- * configured to use PC/SC for SIM/USIM access (EAP-SIM or EAP-AKA).
- */
-int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
-			      struct wpa_ssid *ssid)
-{
-#ifdef IEEE8021X_EAPOL
-	int aka = 0, sim = 0, type;
-
-	if (ssid->pcsc == NULL || wpa_s->scard != NULL)
-		return 0;
-
-	if (ssid->eap_methods == NULL) {
-		sim = 1;
-		aka = 1;
-	} else {
-		struct eap_method_type *eap = ssid->eap_methods;
-		while (eap->vendor != EAP_VENDOR_IETF ||
-		       eap->method != EAP_TYPE_NONE) {
-			if (eap->vendor == EAP_VENDOR_IETF) {
-				if (eap->method == EAP_TYPE_SIM)
-					sim = 1;
-				else if (eap->method == EAP_TYPE_AKA)
-					aka = 1;
-			}
-			eap++;
-		}
-	}
-
-	if (eap_sm_get_eap_methods(EAP_VENDOR_IETF, EAP_TYPE_SIM) == NULL)
-		sim = 0;
-	if (eap_sm_get_eap_methods(EAP_VENDOR_IETF, EAP_TYPE_AKA) == NULL)
-		aka = 0;
-
-	if (!sim && !aka) {
-		wpa_printf(MSG_DEBUG, "Selected network is configured to use "
-			   "SIM, but neither EAP-SIM nor EAP-AKA are enabled");
-		return 0;
-	}
-
-	wpa_printf(MSG_DEBUG, "Selected network is configured to use SIM "
-		   "(sim=%d aka=%d) - initialize PCSC", sim, aka);
-	if (sim && aka)
-		type = SCARD_TRY_BOTH;
-	else if (aka)
-		type = SCARD_USIM_ONLY;
-	else
-		type = SCARD_GSM_SIM_ONLY;
-
-	wpa_s->scard = scard_init(type);
-	if (wpa_s->scard == NULL) {
-		wpa_printf(MSG_WARNING, "Failed to initialize SIM "
-			   "(pcsc-lite)");
-		return -1;
-	}
-	wpa_sm_set_scard_ctx(wpa_s->wpa, wpa_s->scard);
-	eapol_sm_register_scard_ctx(wpa_s->eapol, wpa_s->scard);
-#endif /* IEEE8021X_EAPOL */
-
-	return 0;
-}
 
 
 static int wpa_supplicant_match_privacy(struct wpa_scan_result *bss,
@@ -293,14 +184,7 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_ssid *ssid,
 			break;
 		}
 
-#ifdef CONFIG_IEEE80211W
-		if (!(ie.capabilities & WPA_CAPABILITY_MGMT_FRAME_PROTECTION)
-		    && ssid->ieee80211w == IEEE80211W_REQUIRED) {
-			wpa_printf(MSG_DEBUG, "   skip RSN IE - no mgmt frame "
-				   "protection");
-			break;
-		}
-#endif /* CONFIG_IEEE80211W */
+
 
 		wpa_printf(MSG_DEBUG, "   selected based on RSN IE");
 		return 1;
@@ -529,7 +413,6 @@ static void wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s)
 		if (selected == NULL && wpa_s->blacklist) {
 			wpa_printf(MSG_DEBUG, "No APs found - clear blacklist "
 				   "and try again");
-			wpa_blacklist_clear(wpa_s);
 		} else if (selected == NULL) {
 			break;
 		}
@@ -545,16 +428,13 @@ static void wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s)
 		     (wpa_s->wpa_state != WPA_ASSOCIATING ||
 		      os_memcmp(selected->bssid, wpa_s->pending_bssid,
 				ETH_ALEN) != 0))) {
-			if (wpa_supplicant_scard_init(wpa_s, ssid)) {
-				wpa_supplicant_req_scan(wpa_s, 10, 0);
-				return;
-			}
+
 			wpa_supplicant_associate(wpa_s, selected, ssid);
 		} else {
 			wpa_printf(MSG_DEBUG, "Already associated with the "
 				   "selected AP.");
 		}
-		rsn_preauth_scan_results(wpa_s->wpa, results, num);
+
 	} else {
 		wpa_printf(MSG_DEBUG, "No suitable AP found.");
 		timeout = 5;
@@ -667,11 +547,9 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 		wpa_supplicant_event_associnfo(wpa_s, data);
 
 	wpa_supplicant_set_state(wpa_s, WPA_ASSOCIATED);
-	if (wpa_s->use_client_mlme)
-		os_memcpy(bssid, wpa_s->bssid, ETH_ALEN);
-	if (wpa_s->use_client_mlme ||
-	    (wpa_drv_get_bssid(wpa_s, bssid) >= 0 &&
-	     os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0)) {
+
+	if ( wpa_drv_get_bssid(wpa_s, bssid) >= 0
+	     && os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0) {
 		wpa_msg(wpa_s, MSG_DEBUG, "Associated to a new BSS: BSSID="
 			MACSTR, MAC2STR(bssid));
 		os_memcpy(wpa_s->bssid, bssid, ETH_ALEN);
@@ -687,13 +565,7 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 	}
 
 	wpa_msg(wpa_s, MSG_INFO, "Associated with " MACSTR, MAC2STR(bssid));
-	if (wpa_s->current_ssid) {
-		/* When using scanning (ap_scan=1), SIM PC/SC interface can be
-		 * initialized before association, but for other modes,
-		 * initialize PC/SC here, if the current configuration needs
-		 * smartcard or SIM/USIM. */
-		wpa_supplicant_scard_init(wpa_s, wpa_s->current_ssid);
-	}
+
 	wpa_sm_notify_assoc(wpa_s->wpa, bssid);
 	l2_packet_notify_auth_start(wpa_s->l2);
 
@@ -705,15 +577,10 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 	 * AUTHENTICATED without ever giving chance to EAP state machine to
 	 * reset the state.
 	 */
-	eapol_sm_notify_portEnabled(wpa_s->eapol, FALSE);
-	eapol_sm_notify_portValid(wpa_s->eapol, FALSE);
-	if (wpa_s->key_mgmt == WPA_KEY_MGMT_PSK)
-		eapol_sm_notify_eap_success(wpa_s->eapol, FALSE);
+
 	/* 802.1X::portControl = Auto */
-	eapol_sm_notify_portEnabled(wpa_s->eapol, TRUE);
 	wpa_s->eapol_received = 0;
-	if (wpa_s->key_mgmt == WPA_KEY_MGMT_NONE ||
-	    wpa_s->key_mgmt == WPA_KEY_MGMT_WPA_NONE) {
+	if (wpa_s->key_mgmt == WPA_KEY_MGMT_NONE) {
 		wpa_supplicant_cancel_auth_timeout(wpa_s);
 		wpa_supplicant_set_state(wpa_s, WPA_COMPLETED);
 	} else {
@@ -728,16 +595,6 @@ static void wpa_supplicant_event_disassoc(struct wpa_supplicant *wpa_s)
 {
 	const u8 *bssid;
 
-	if (wpa_s->key_mgmt == WPA_KEY_MGMT_WPA_NONE) {
-		/*
-		 * At least Host AP driver and a Prism3 card seemed to be
-		 * generating streams of disconnected events when configuring
-		 * IBSS for WPA-None. Ignore them for now.
-		 */
-		wpa_printf(MSG_DEBUG, "Disconnect event - ignore in "
-			   "IBSS/WPA-None mode");
-		return;
-	}
 
 	if (wpa_s->wpa_state == WPA_4WAY_HANDSHAKE &&
 	    wpa_s->key_mgmt == WPA_KEY_MGMT_PSK) {
@@ -749,10 +606,6 @@ static void wpa_supplicant_event_disassoc(struct wpa_supplicant *wpa_s)
 	bssid = wpa_s->bssid;
 	if (os_memcmp(bssid, "\x00\x00\x00\x00\x00\x00", ETH_ALEN) == 0)
 		bssid = wpa_s->pending_bssid;
-	wpa_blacklist_add(wpa_s, bssid);
-	wpa_sm_notify_disassoc(wpa_s->wpa);
-	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_DISCONNECTED "- Disconnect event - "
-		"remove keys");
 	if (wpa_supplicant_dynamic_keys(wpa_s)) {
 		wpa_s->keys_cleared = 0;
 		wpa_clear_keys(wpa_s, wpa_s->bssid);
@@ -799,45 +652,7 @@ wpa_supplicant_event_michael_mic_failure(struct wpa_supplicant *wpa_s,
 }
 
 
-static void
-wpa_supplicant_event_interface_status(struct wpa_supplicant *wpa_s,
-				      union wpa_event_data *data)
-{
-	if (os_strcmp(wpa_s->ifname, data->interface_status.ifname) != 0)
-		return;
 
-	switch (data->interface_status.ievent) {
-	case EVENT_INTERFACE_ADDED:
-		if (!wpa_s->interface_removed)
-			break;
-		wpa_s->interface_removed = 0;
-		wpa_printf(MSG_DEBUG, "Configured interface was added.");
-		if (wpa_supplicant_driver_init(wpa_s, 1) < 0) {
-			wpa_printf(MSG_INFO, "Failed to initialize the driver "
-				   "after interface was added.");
-		}
-		break;
-	case EVENT_INTERFACE_REMOVED:
-		wpa_printf(MSG_DEBUG, "Configured interface was removed.");
-		wpa_s->interface_removed = 1;
-		wpa_supplicant_mark_disassoc(wpa_s);
-		l2_packet_deinit(wpa_s->l2);
-		wpa_s->l2 = NULL;
-		break;
-	}
-}
-
-
-#ifdef CONFIG_PEERKEY
-static void
-wpa_supplicant_event_stkstart(struct wpa_supplicant *wpa_s,
-			      union wpa_event_data *data)
-{
-	if (data == NULL)
-		return;
-	wpa_sm_stkstart(wpa_s->wpa, data->stkstart.peer);
-}
-#endif /* CONFIG_PEERKEY */
 
 
 void wpa_supplicant_event(struct wpa_supplicant *wpa_s, wpa_event_type event,
@@ -859,17 +674,6 @@ void wpa_supplicant_event(struct wpa_supplicant *wpa_s, wpa_event_type event,
 	case EVENT_ASSOCINFO:
 		wpa_supplicant_event_associnfo(wpa_s, data);
 		break;
-	case EVENT_INTERFACE_STATUS:
-		wpa_supplicant_event_interface_status(wpa_s, data);
-		break;
-	case EVENT_PMKID_CANDIDATE:
-		wpa_supplicant_event_pmkid_candidate(wpa_s, data);
-		break;
-#ifdef CONFIG_PEERKEY
-	case EVENT_STKSTART:
-		wpa_supplicant_event_stkstart(wpa_s, data);
-		break;
-#endif /* CONFIG_PEERKEY */
 	default:
 		wpa_printf(MSG_INFO, "Unknown event %d", event);
 		break;

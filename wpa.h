@@ -51,8 +51,6 @@ enum {
 
 struct wpa_sm;
 struct wpa_ssid;
-struct eapol_sm;
-struct wpa_config_blob;
 
 struct wpa_sm_ctx {
 	void *ctx; /* pointer to arbitrary upper level context */
@@ -76,18 +74,13 @@ struct wpa_sm_ctx {
 			    size_t *msg_len, void **data_pos);
 	int (*add_pmkid)(void *ctx, const u8 *bssid, const u8 *pmkid);
 	int (*remove_pmkid)(void *ctx, const u8 *bssid, const u8 *pmkid);
-	void (*set_config_blob)(void *ctx, struct wpa_config_blob *blob);
-	const struct wpa_config_blob * (*get_config_blob)(void *ctx,
-							  const char *name);
+
 	int (*mlme_setprotection)(void *ctx, const u8 *addr,
 				  int protection_type, int key_type);
 };
 
 
 enum wpa_sm_conf_params {
-	RSNA_PMK_LIFETIME /* dot11RSNAConfigPMKLifetime */,
-	RSNA_PMK_REAUTH_THRESHOLD /* dot11RSNAConfigPMKReauthThreshold */,
-	RSNA_SA_TIMEOUT /* dot11RSNAConfigSATimeout */,
 	WPA_PARAM_PROTO,
 	WPA_PARAM_PAIRWISE,
 	WPA_PARAM_GROUP,
@@ -111,7 +104,6 @@ struct wpa_ie_data {
 struct wpa_sm * wpa_sm_init(struct wpa_sm_ctx *ctx);
 void wpa_sm_deinit(struct wpa_sm *sm);
 void wpa_sm_notify_assoc(struct wpa_sm *sm, const u8 *bssid);
-void wpa_sm_notify_disassoc(struct wpa_sm *sm);
 void wpa_sm_set_pmk(struct wpa_sm *sm, const u8 *pmk, size_t pmk_len);
 void wpa_sm_set_pmk_from_pmksa(struct wpa_sm *sm);
 void wpa_sm_set_fast_reauth(struct wpa_sm *sm, int fast_reauth);
@@ -120,13 +112,11 @@ void wpa_sm_set_config(struct wpa_sm *sm, struct wpa_ssid *config);
 void wpa_sm_set_own_addr(struct wpa_sm *sm, const u8 *addr);
 void wpa_sm_set_ifname(struct wpa_sm *sm, const char *ifname,
 		       const char *bridge_ifname);
-void wpa_sm_set_eapol(struct wpa_sm *sm, struct eapol_sm *eapol);
 int wpa_sm_set_assoc_wpa_ie(struct wpa_sm *sm, const u8 *ie, size_t len);
 int wpa_sm_set_assoc_wpa_ie_default(struct wpa_sm *sm, u8 *wpa_ie,
 				    size_t *wpa_ie_len);
 int wpa_sm_set_ap_wpa_ie(struct wpa_sm *sm, const u8 *ie, size_t len);
 int wpa_sm_set_ap_rsn_ie(struct wpa_sm *sm, const u8 *ie, size_t len);
-int wpa_sm_get_mib(struct wpa_sm *sm, char *buf, size_t buflen);
 
 int wpa_sm_set_param(struct wpa_sm *sm, enum wpa_sm_conf_params param,
 		     unsigned int value);
